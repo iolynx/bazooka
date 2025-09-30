@@ -1,0 +1,58 @@
+/* Style the main window */
+.window {
+  background-color: #22252d;
+}
+
+/* Style the search bar */
+.search-entry {
+  font-size: 2.3rem;
+  min-height: 1rem;
+  border-radius: 1rem;
+  border: none;
+  color: #f0f0f0;
+  background-color: #34343B;
+  margin: 0.8rem;
+}
+
+.search-entry text {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.result-comment {
+  font-size: 0.9rem;
+}
+
+list {
+  background-image: none;
+  background-color: #34343B;
+}
+
+row {
+  background-color: rgba(12, 12, 12, 0.2);
+}
+
+button {
+  background-image: none;
+  border: none;
+  font-size: 1.6rem;
+  margin-left: 0.5rem;
+  margin-right: 0.5rem;
+}
+
+button box {
+  background-image: none;
+  background-color: #34343B;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+list row:selected,
+list row:selected button {
+  background-image: none;
+  background-color: #44454B;
+}
+
+.bg {
+    background-color: #34343B;
+}

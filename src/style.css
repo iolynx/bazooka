@@ -1,6 +1,6 @@
 /* Style the main window */
-.window {
-  background-color: #22252d;
+window {
+  background-color: #22252d20;
 }
 
 /* Style the search bar */
@@ -10,7 +10,7 @@
   border-radius: 1rem;
   border: none;
   color: #f0f0f0;
-  background-color: #34343B;
+  background-color: #44454B60;
   margin: 0.8rem;
 }
 
@@ -23,36 +23,32 @@
   font-size: 0.9rem;
 }
 
-list {
-  background-image: none;
-  background-color: #34343B;
+/* Style the result list */
+.results-list {
+  /* background-color: #34343B; */
+  background-color: #20242C00;
 }
 
-row {
-  background-color: rgba(12, 12, 12, 0.2);
-}
-
-button {
-  background-image: none;
+/* Style for a single result row */
+.result-row {
   border: none;
   font-size: 1.6rem;
-  margin-left: 0.5rem;
-  margin-right: 0.5rem;
 }
 
-button box {
+.result-row-content {
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+  margin-left: 1.5rem;
+  margin-right: 1.5rem;
+}
+
+.result-row:hover {
   background-image: none;
-  background-color: #34343B;
-  margin-left: 0;
-  margin-right: 0;
+  background-color: #22252d00;
 }
 
-list row:selected,
-list row:selected button {
+/* Style for a selected result row */
+.result-row:selected {
   background-image: none;
-  background-color: #44454B;
-}
-
-.bg {
-    background-color: #34343B;
+  background-color: #44454B70;
 }

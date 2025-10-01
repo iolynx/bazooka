@@ -1,8 +1,6 @@
-use gtk4::StyleContext;
 use gtk4::gdk;
 use gtk4::glib::Propagation;
 use gtk4::pango::EllipsizeMode;
-use gtk4::style_context_add_provider_for_display;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -12,7 +10,9 @@ use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use gtk4::CssProvider;
 use gtk4::prelude::*;
-use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button, Entry, ListBox, Orientation};
+use gtk4::{
+    Application, ApplicationWindow, Box as GtkBox, Entry, ListBox, ListBoxRow, Orientation,
+};
 
 pub fn run_gui() {
     // Create GTK application
@@ -29,19 +29,17 @@ pub fn run_gui() {
             .application(app)
             .title("Bazooka")
             .default_width(580)
-            .default_height(600)
+            .default_height(625)
             .resizable(false)
             .opacity(1.0)
             .build();
 
-        let window_clone = window.clone();
-
         let provider = CssProvider::new();
         provider.load_from_data(include_str!("style.css"));
         gtk4::style_context_add_provider_for_display(
-            &WidgetExt::display(&window),
+            &gtk4::prelude::WidgetExt::display(&window),
             &provider,
-            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            gtk4::STYLE_PROVIDER_PRIORITY_USER,
         );
 
         window.add_css_class("window");
@@ -56,6 +54,7 @@ pub fn run_gui() {
 
         // results
         let list = ListBox::new();
+        list.add_css_class("results-list");
         vbox.append(&list);
 
         window.set_child(Some(&vbox));
@@ -63,22 +62,20 @@ pub fn run_gui() {
 
         entry.grab_focus();
 
-        // Clone state (wtf is this black magic?)
-        let all_apps_rc = Rc::new(all_apps);
-
         // fuzzy search on input
         let list_clone = list.clone();
+        let results_clone = Rc::clone(&results);
         entry.connect_changed(move |entry| {
             let query = entry.text().to_string();
             let matcher = SkimMatcherV2::default();
 
-            let filtered: Vec<DesktopEntry> = all_apps_rc
+            let filtered: Vec<DesktopEntry> = all_apps
                 .iter()
                 .filter(|app| matcher.fuzzy_match(&app.name, &query).is_some())
                 .take(8)
                 .cloned()
                 .collect();
-            *results.borrow_mut() = filtered.clone();
+            *results_clone.borrow_mut() = filtered.clone();
 
             while let Some(child) = list_clone.first_child() {
                 list_clone.remove(&child);
@@ -86,10 +83,10 @@ pub fn run_gui() {
 
             for app in filtered {
                 let hbox = GtkBox::new(Orientation::Horizontal, 12);
+                hbox.add_css_class("result-row-content");
 
                 let image = if let Some(primary_icon) = &app.icon {
                     let theme = gtk4::IconTheme::default();
-
                     if theme.has_icon(primary_icon) {
                         gtk4::Image::from_icon_name(primary_icon)
                     } else {
@@ -107,7 +104,6 @@ pub fn run_gui() {
                 hbox.append(&image);
 
                 let vbox = GtkBox::new(Orientation::Vertical, 5);
-
                 let label = gtk4::Label::new(Some(&app.name));
                 label.set_halign(gtk4::Align::Start);
                 vbox.append(&label);
@@ -116,37 +112,42 @@ pub fn run_gui() {
                     let comment_label = gtk4::Label::new(Some(comment));
                     comment_label.set_halign(gtk4::Align::Start);
                     comment_label.add_css_class("result-comment");
-
                     comment_label.set_ellipsize(EllipsizeMode::End);
-
-                    // wrap instead of ellipsize
-                    // comment_label.set_wrap(true);
-                    // comment_label.set_max_width_chars(110);
-
+                    vbox.append(&comment_label);
+                } else {
+                    let comment_label = gtk4::Label::new(Some(" "));
+                    comment_label.set_halign(gtk4::Align::Start);
+                    comment_label.add_css_class("result-comment");
+                    comment_label.set_ellipsize(EllipsizeMode::End);
                     vbox.append(&comment_label);
                 }
-
                 hbox.append(&vbox);
 
-                let button = Button::new();
-                button.set_child(Some(&hbox));
-                button.add_css_class("bg");
-
-                let window_clone = window_clone.clone();
-                let exec = app.exec.clone();
-                button.connect_clicked(move |_| {
-                    let _ = std::process::Command::new("sh")
-                        .arg("-c")
-                        .arg(&exec)
-                        .spawn();
-                    window_clone.close();
-                });
-
-                list_clone.append(&button);
+                let row = ListBoxRow::new();
+                row.set_child(Some(&hbox));
+                row.add_css_class("result-row");
+                row.set_activatable(true);
+                list_clone.append(&row);
             }
 
             if let Some(first_row) = list_clone.row_at_index(0) {
                 list_clone.select_row(Some(&first_row));
+            }
+        });
+
+        // Handle row activation (click or Enter)
+        let window_clone = window.clone();
+        let results_clone_for_activate = Rc::clone(&results);
+        list.connect_row_activated(move |_, row| {
+            let index = row.index();
+            if index >= 0
+                && let Some(app) = results_clone_for_activate.borrow().get(index as usize)
+            {
+                let _ = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(&app.exec)
+                    .spawn();
+                window_clone.close();
             }
         });
 
@@ -161,15 +162,10 @@ pub fn run_gui() {
             let get_state = || -> Option<(i32, u32)> {
                 let selected_row = list.selected_row()?;
                 let index = selected_row.index();
-                let total = list
-                    .last_child()
-                    .and_then(|w| w.downcast::<gtk4::ListBoxRow>().ok())
-                    .map(|r| r.index() as u32 + 1)
-                    .unwrap_or(0);
+                let total = list.observe_children().n_items();
                 Some((index, total))
             };
 
-            // Helper function to move the selection
             let move_selection = |delta: i32| {
                 if let Some((index, total)) = get_state() {
                     let new_index = (index + delta).clamp(0, total as i32 - 1);
@@ -179,18 +175,16 @@ pub fn run_gui() {
                 }
             };
 
-            // Check for Ctrl+N and Ctrl+P
             let is_ctrl = modifier.contains(gdk::ModifierType::CONTROL_MASK);
             if is_ctrl {
                 match keyval {
-                    gtk4::gdk::Key::n => move_selection(1),  // Ctrl+N for next
-                    gtk4::gdk::Key::p => move_selection(-1), // Ctrl+P for previous
+                    gtk4::gdk::Key::n => move_selection(1),
+                    gtk4::gdk::Key::p => move_selection(-1),
                     _ => return Propagation::Proceed,
                 }
                 return Propagation::Stop;
             }
 
-            // Check for Arrow keys and Enter
             match keyval {
                 gtk4::gdk::Key::Up => move_selection(-1),
                 gtk4::gdk::Key::Down => move_selection(1),
@@ -198,16 +192,12 @@ pub fn run_gui() {
                     window_clone.close();
                 }
                 gtk4::gdk::Key::Return | gtk4::gdk::Key::KP_Enter => {
-                    // Activate the selected item
-                    if let Some(selected) = list.selected_row()
-                        && let Some(button) = selected
-                            .child()
-                            .and_then(|w| w.downcast::<gtk4::Button>().ok())
-                    {
-                        button.emit_clicked();
+                    if let Some(selected_row) = list.selected_row() {
+                        list.emit_by_name::<()>("row-activated", &[&selected_row]);
                     }
                 }
-                _ => return Propagation::Proceed, // Allow other keys (like text input) to work normally
+                // Enter is handled by connect_row_activated
+                _ => return Propagation::Proceed,
             }
 
             Propagation::Stop

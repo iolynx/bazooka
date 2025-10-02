@@ -10,7 +10,7 @@ window {
   border-radius: 1rem;
   border: none;
   color: #f0f0f0;
-  background-color: #44454B60;
+  background-color: #44454B45;
   margin: 0.8rem;
 }
 
@@ -50,5 +50,6 @@ window {
 /* Style for a selected result row */
 .result-row:selected {
   background-image: none;
-  background-color: #44454B70;
+  /* background-color: #44454B70; */
+  background-color: #DEC4D120;
 }

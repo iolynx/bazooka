@@ -14,6 +14,15 @@ use gtk4::{
     Application, ApplicationWindow, Box as GtkBox, Entry, ListBox, ListBoxRow, Orientation,
 };
 
+#[derive(Clone)]
+pub enum SearchResult {
+    App(DesktopEntry),
+    CalcResult {
+        display: String,
+        value_to_copy: String,
+    },
+}
+
 pub fn run_gui() {
     // Create GTK application
     let app = Application::builder()
@@ -23,7 +32,7 @@ pub fn run_gui() {
     // Build UI inside activate handler
     app.connect_activate(|app| {
         let all_apps: Vec<DesktopEntry> = load_cache().unwrap_or_default();
-        let results = Rc::new(RefCell::new(all_apps.clone()));
+        let results = Rc::new(RefCell::new(Vec::<SearchResult>::new()));
 
         let window = ApplicationWindow::builder()
             .application(app)
@@ -64,72 +73,120 @@ pub fn run_gui() {
 
         // fuzzy search on input
         let list_clone = list.clone();
-        let results_clone = Rc::clone(&results);
+        let results_for_changed = Rc::clone(&results);
         entry.connect_changed(move |entry| {
             let query = entry.text().to_string();
-            let matcher = SkimMatcherV2::default();
+            let mut current_results: Vec<SearchResult> = Vec::new();
 
-            let filtered: Vec<DesktopEntry> = all_apps
-                .iter()
-                .filter(|app| matcher.fuzzy_match(&app.name, &query).is_some())
-                .take(8)
-                .cloned()
-                .collect();
-            *results_clone.borrow_mut() = filtered.clone();
+            if let Ok(result) = meval::eval_str(&query)
+                && result.is_finite()
+            {
+                current_results.push(SearchResult::CalcResult {
+                    display: format!("{}", result),
+                    value_to_copy: result.to_string(),
+                })
+            }
+
+            if current_results.is_empty() && !query.is_empty() {
+                let matcher = SkimMatcherV2::default();
+                let filtered: Vec<DesktopEntry> = all_apps
+                    .iter()
+                    .filter(|app| matcher.fuzzy_match(&app.name, &query).is_some())
+                    .take(8)
+                    .cloned()
+                    .collect();
+                current_results = filtered.into_iter().map(SearchResult::App).collect();
+            }
 
             while let Some(child) = list_clone.first_child() {
                 list_clone.remove(&child);
             }
 
-            for app in filtered {
-                let hbox = GtkBox::new(Orientation::Horizontal, 12);
-                hbox.add_css_class("result-row-content");
+            for result in &current_results {
+                let row = ListBoxRow::new();
+                row.set_activatable(true);
+                row.add_css_class("result-row");
 
-                let image = if let Some(primary_icon) = &app.icon {
-                    let theme = gtk4::IconTheme::default();
-                    if theme.has_icon(primary_icon) {
-                        gtk4::Image::from_icon_name(primary_icon)
-                    } else {
-                        let fallback_icon = app.name.to_lowercase();
-                        if theme.has_icon(&fallback_icon) {
-                            gtk4::Image::from_icon_name(&fallback_icon)
+                let hbox = GtkBox::new(Orientation::Horizontal, 12);
+
+                match result {
+                    SearchResult::App(app) => {
+                        let hbox = GtkBox::new(Orientation::Horizontal, 12);
+                        hbox.add_css_class("result-row-content");
+
+                        let image = if let Some(primary_icon) = &app.icon {
+                            let theme = gtk4::IconTheme::default();
+                            if theme.has_icon(primary_icon) {
+                                gtk4::Image::from_icon_name(primary_icon)
+                            } else {
+                                let fallback_icon = app.name.to_lowercase();
+                                if theme.has_icon(&fallback_icon) {
+                                    gtk4::Image::from_icon_name(&fallback_icon)
+                                } else {
+                                    gtk4::Image::from_icon_name("application-x-executable-symbolic")
+                                }
+                            }
                         } else {
                             gtk4::Image::from_icon_name("application-x-executable-symbolic")
+                        };
+                        image.set_icon_size(gtk4::IconSize::Large);
+                        hbox.append(&image);
+
+                        let vbox = GtkBox::new(Orientation::Vertical, 5);
+                        let label = gtk4::Label::new(Some(&app.name));
+                        label.set_halign(gtk4::Align::Start);
+                        vbox.append(&label);
+
+                        if let Some(comment) = &app.comment {
+                            let comment_label = gtk4::Label::new(Some(comment));
+                            comment_label.set_halign(gtk4::Align::Start);
+                            comment_label.add_css_class("result-comment");
+                            comment_label.set_ellipsize(EllipsizeMode::End);
+                            vbox.append(&comment_label);
+                        } else {
+                            let comment_label = gtk4::Label::new(Some(" "));
+                            comment_label.set_halign(gtk4::Align::Start);
+                            comment_label.add_css_class("result-comment");
+                            comment_label.set_ellipsize(EllipsizeMode::End);
+                            vbox.append(&comment_label);
                         }
+                        hbox.append(&vbox);
+
+                        let row = ListBoxRow::new();
+                        row.set_child(Some(&hbox));
+                        row.add_css_class("result-row");
+                        row.set_activatable(true);
+                        list_clone.append(&row);
                     }
-                } else {
-                    gtk4::Image::from_icon_name("application-x-executable-symbolic")
-                };
-                image.set_icon_size(gtk4::IconSize::Large);
-                hbox.append(&image);
+                    SearchResult::CalcResult { display, .. } => {
+                        let image = gtk4::Image::from_icon_name("accessories-calculator-symbolic");
+                        image.set_icon_size(gtk4::IconSize::Large);
+                        hbox.add_css_class("result-row-content");
+                        hbox.append(&image);
 
-                let vbox = GtkBox::new(Orientation::Vertical, 5);
-                let label = gtk4::Label::new(Some(&app.name));
-                label.set_halign(gtk4::Align::Start);
-                vbox.append(&label);
+                        let vbox = GtkBox::new(Orientation::Vertical, 5);
+                        let label = gtk4::Label::new(Some(display));
+                        label.set_halign(gtk4::Align::Start);
+                        vbox.append(&label);
 
-                if let Some(comment) = &app.comment {
-                    let comment_label = gtk4::Label::new(Some(comment));
-                    comment_label.set_halign(gtk4::Align::Start);
-                    comment_label.add_css_class("result-comment");
-                    comment_label.set_ellipsize(EllipsizeMode::End);
-                    vbox.append(&comment_label);
-                } else {
-                    let comment_label = gtk4::Label::new(Some(" "));
-                    comment_label.set_halign(gtk4::Align::Start);
-                    comment_label.add_css_class("result-comment");
-                    comment_label.set_ellipsize(EllipsizeMode::End);
-                    vbox.append(&comment_label);
+                        let comment_label =
+                            gtk4::Label::new(Some("Press Enter to copy the result."));
+                        comment_label.set_halign(gtk4::Align::Start);
+                        comment_label.add_css_class("result-comment");
+                        vbox.append(&comment_label);
+
+                        hbox.append(&vbox);
+                        row.set_child(Some(&hbox));
+                        row.add_css_class("result-row");
+                        row.set_activatable(true);
+
+                        list_clone.append(&row);
+                    }
                 }
-                hbox.append(&vbox);
-
-                let row = ListBoxRow::new();
-                row.set_child(Some(&hbox));
-                row.add_css_class("result-row");
-                row.set_activatable(true);
-                list_clone.append(&row);
+                // list_clone.append(&row);
             }
 
+            *results_for_changed.borrow_mut() = current_results;
             if let Some(first_row) = list_clone.row_at_index(0) {
                 list_clone.select_row(Some(&first_row));
             }
@@ -141,13 +198,21 @@ pub fn run_gui() {
         list.connect_row_activated(move |_, row| {
             let index = row.index();
             if index >= 0
-                && let Some(app) = results_clone_for_activate.borrow().get(index as usize)
+                && let Some(result) = results_clone_for_activate.borrow().get(index as usize)
             {
-                let _ = std::process::Command::new("sh")
-                    .arg("-c")
-                    .arg(&app.exec)
-                    .spawn();
-                window_clone.close();
+                match result {
+                    SearchResult::App(app) => {
+                        let _ = std::process::Command::new("sh")
+                            .arg("-c")
+                            .arg(&app.exec)
+                            .spawn();
+                        window_clone.close();
+                    }
+                    SearchResult::CalcResult { value_to_copy, .. } => {
+                        let display = gdk::Display::default().expect("Could not get display");
+                        display.clipboard().set_text(value_to_copy);
+                    }
+                }
             }
         });
 
@@ -196,7 +261,6 @@ pub fn run_gui() {
                         list.emit_by_name::<()>("row-activated", &[&selected_row]);
                     }
                 }
-                // Enter is handled by connect_row_activated
                 _ => return Propagation::Proceed,
             }
 

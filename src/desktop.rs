@@ -58,6 +58,19 @@ pub fn parse_desktop_entry(content: &str) -> Vec<DesktopEntry> {
 
     // First, try to build the main entry
     if let Some(main_section) = sections.get("[Desktop Entry]") {
+        // skip all KDE only entries
+        if let Some(value) = main_section.get("OnlyShowIn")
+            && value.split(';').any(|de| de.trim() == "KDE")
+        {
+            return Vec::new();
+        }
+
+        if let Some(value) = main_section.get("NoDisplay")
+            && value.split(';').any(|de| de.trim() == "true")
+        {
+            return Vec::new();
+        }
+
         let name = main_section.get("Name").cloned();
         let exec = main_section.get("Exec").cloned();
         let icon = main_section.get("Icon").cloned();

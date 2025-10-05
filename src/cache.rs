@@ -1,5 +1,4 @@
 use crate::desktop::DesktopEntry;
-use dirs;
 use std::{fs, path::PathBuf};
 
 fn cache_file() -> PathBuf {

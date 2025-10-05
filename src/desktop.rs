@@ -59,6 +59,7 @@ pub fn parse_desktop_entry(content: &str) -> Vec<DesktopEntry> {
     // First, try to build the main entry
     if let Some(main_section) = sections.get("[Desktop Entry]") {
         // skip all KDE only entries
+        // TODO: check xdgdesktop and clear according to that
         if let Some(value) = main_section.get("OnlyShowIn")
             && value.split(';').any(|de| de.trim() == "KDE")
         {

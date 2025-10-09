@@ -1,8 +1,5 @@
-bug:
-- fix the weird height issue
-
 feat:
-- add custom actions
-- add calculator support
-- make it look good
+- add browser search
+- add file search
+- add tab arguments
 

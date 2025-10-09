@@ -1,4 +1,6 @@
+use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,7 +13,7 @@ pub struct DesktopEntry {
 
 pub fn app_dirs() -> Vec<PathBuf> {
     let mut dirs = vec![];
-    // User applications dir
+    // User applications dirs
     if let Ok(xdg_home) = std::env::var("XDG_DATA_HOME") {
         dirs.push(PathBuf::from(xdg_home).join("applications"));
     } else {
@@ -31,6 +33,24 @@ pub fn app_dirs() -> Vec<PathBuf> {
     // Adding Flatpak and Snap manually
     dirs.push(PathBuf::from("/var/lib/flatpak/exports/share/applications"));
     dirs.push(PathBuf::from("/var/lib/snapd/desktop/applications"));
+
+    // Adding custom desktop actions
+    if let Some(proj_dirs) = ProjectDirs::from("com", "iolynx", "bazooka") {
+        // Get the project config dir
+        let config_dir: PathBuf = proj_dirs.config_dir().to_path_buf();
+        println!("Config Directory: {:?}", config_dir);
+
+        // Create the dir if it doesnt exist
+        if let Err(e) = fs::create_dir_all(&config_dir) {
+            eprintln!("Failed to create config directory: {}", e);
+        }
+
+        // Custom Desktop Actions folder path
+        let custom_actions_dir = config_dir.join("actions");
+        println!("Custom Actions directory: {:?}", custom_actions_dir);
+
+        dirs.push(custom_actions_dir);
+    }
     dirs
 }
 

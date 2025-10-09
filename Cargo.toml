@@ -15,3 +15,4 @@ gtk4 = { version = "0.9", package = "gtk4" }
 gio = "0.17"
 anyhow = "1.0.100"
 meval = "0.2.0"
+directories = "6.0.0"
